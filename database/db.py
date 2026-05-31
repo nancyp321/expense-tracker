@@ -86,3 +86,31 @@ def get_user_by_email(email):
     ).fetchone()
     db.close()
     return user
+
+
+def get_user_by_id(user_id):
+    db = get_db()
+    user = db.execute(
+        "SELECT * FROM users WHERE id = ?",
+        (user_id,)
+    ).fetchone()
+    db.close()
+    return user
+
+
+def get_expense_summary(user_id):
+    db = get_db()
+    row = db.execute(
+        "SELECT COALESCE(SUM(amount), 0.0) AS total, COUNT(*) AS count FROM expenses WHERE user_id = ?",
+        (user_id,)
+    ).fetchone()
+    by_category = db.execute(
+        "SELECT category, SUM(amount) AS subtotal FROM expenses WHERE user_id = ? GROUP BY category ORDER BY subtotal DESC",
+        (user_id,)
+    ).fetchall()
+    db.close()
+    return {
+        "total": row["total"],
+        "count": row["count"],
+        "by_category": [(r["category"], r["subtotal"]) for r in by_category],
+    }
