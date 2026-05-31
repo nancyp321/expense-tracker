@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}My Profile — Spendly{% endblock %}
+
+{% block content %}
+
+{# --- Section: Profile Header --- #}
+<section class="profile-header">
+  <div class="profile-header__inner">
+    <div class="profile-header__avatar">
+      <i data-lucide="user"></i>
+    </div>
+    <div class="profile-header__info">
+      <h1 class="profile-header__title">{{ user.name }}</h1>
+      <div class="profile-header__meta">
+        <span class="profile-badge">
+          <i data-lucide="mail"></i>
+          {{ user.email }}
+        </span>
+        <span class="profile-badge">
+          <i data-lucide="calendar"></i>
+          Member since {{ member_since }}
+        </span>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# --- Section: Stats Cards --- #}
+<section class="profile-section">
+  <div class="profile-stats">
+
+    <article class="stat-card stat-card--3d">
+      <div class="stat-card__icon stat-card__icon--green">
+        <i data-lucide="receipt"></i>
+      </div>
+      <p class="stat-card__value">₹{{ "{:,.2f}".format(summary.total) }}</p>
+      <p class="stat-card__label">Total Spent</p>
+    </article>
+
+    <article class="stat-card stat-card--3d">
+      <div class="stat-card__icon stat-card__icon--amber">
+        <i data-lucide="bar-chart-2"></i>
+      </div>
+      <p class="stat-card__value">{{ summary.count }}</p>
+      <p class="stat-card__label">Expenses Tracked</p>
+    </article>
+
+  </div>
+
+  {# --- Section: Category Breakdown --- #}
+  <div class="category-section">
+    <h2 class="category-section__title">Spending by Category</h2>
+
+    {% if summary.by_category %}
+      <div class="category-list">
+        {% for category, subtotal in summary.by_category %}
+          {% set pct = ((subtotal / summary.total) * 100) | round(1) if summary.total > 0 else 0 %}
+          <div class="category-row">
+            <span class="category-row__name">{{ category }}</span>
+            <div class="mock-bar-track category-row__bar">
+              <div class="mock-bar" style="width: {{ pct }}%"></div>
+            </div>
+            <span class="category-row__amount">₹{{ "{:,.2f}".format(subtotal) }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="category-empty">
+        <i data-lucide="inbox"></i>
+        <p>No expenses yet — start tracking below.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  {# --- Section: CTA --- #}
+  <div class="profile-cta">
+    <a href="{{ url_for('add_expense') }}" class="btn-primary">
+      <i data-lucide="plus-circle"></i>
+      Track an Expense
+    </a>
+  </div>
+
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/lucide@latest"></script>
+<script>
+  lucide.createIcons();
+
+  // --- 3D tilt effect on stat cards ---
+  document.querySelectorAll('.stat-card--3d').forEach(card => {
+    card.addEventListener('mousemove', e => {
+      const rect = card.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width  - 0.5;
+      const y = (e.clientY - rect.top)  / rect.height - 0.5;
+      card.style.transform = `perspective(800px) rotateY(${x * 10}deg) rotateX(${-y * 8}deg) translateZ(6px)`;
+    });
+    card.addEventListener('mouseleave', () => {
+      card.style.transform = '';
+    });
+  });
+</script>
+{% endblock %}
