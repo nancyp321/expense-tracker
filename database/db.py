@@ -66,3 +66,13 @@ def seed_db():
     )
     conn.commit()
     conn.close()
+
+
+def create_user(name, email, password_hash):
+    db = get_db()
+    cursor = db.execute(
+        "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
+        (name, email, password_hash),
+    )
+    db.commit()
+    return cursor.lastrowid
