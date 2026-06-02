@@ -2,7 +2,12 @@ import sqlite3
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import generate_password_hash, check_password_hash
-from database.db import get_db, init_db, seed_db, create_user, get_user_by_email, get_user_by_id, get_expense_summary
+from database.db import (
+    get_db, init_db, seed_db,
+    create_user, get_user_by_email, get_user_by_id, get_expense_summary,
+    get_user_expenses, update_user_profile, update_user_password,
+    get_expenses_by_category,
+)
 
 app = Flask(__name__)
 app.secret_key = "dev-secret-key"
@@ -90,6 +95,83 @@ def profile():
     member_since = datetime.strptime(user["created_at"], "%Y-%m-%d %H:%M:%S").strftime("%B %Y")
     summary = get_expense_summary(user_id)
     return render_template("profile.html", user=user, summary=summary, member_since=member_since)
+
+
+# ------------------------------------------------------------------ #
+# History Routes                                                      #
+# ------------------------------------------------------------------ #
+
+@app.route("/profile/history")
+def profile_history():
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect(url_for("login"))
+    expenses = get_user_expenses(user_id)
+    return render_template("history.html", expenses=expenses)
+
+
+# ------------------------------------------------------------------ #
+# Summary Stats / Profile Edit Routes                                 #
+# ------------------------------------------------------------------ #
+
+@app.route("/profile/edit", methods=["POST"])
+def profile_edit():
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect(url_for("login"))
+    name  = request.form.get("name", "").strip()
+    email = request.form.get("email", "").strip()
+    if not name or not email:
+        flash("Name and email are required.", "error")
+        return redirect(url_for("profile"))
+    try:
+        update_user_profile(user_id, name, email)
+        session["user_name"] = name
+        flash("Profile updated successfully.", "success")
+    except sqlite3.IntegrityError:
+        flash("That email is already in use by another account.", "error")
+    return redirect(url_for("profile"))
+
+
+@app.route("/profile/password", methods=["POST"])
+def profile_password():
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect(url_for("login"))
+    current = request.form.get("current_password", "")
+    new_pw  = request.form.get("new_password", "")
+    confirm = request.form.get("confirm_password", "")
+    if new_pw != confirm:
+        flash("New passwords do not match.", "error")
+        return redirect(url_for("profile"))
+    user = get_user_by_id(user_id)
+    if user is None or not check_password_hash(user["password_hash"], current):
+        flash("Current password is incorrect.", "error")
+        return redirect(url_for("profile"))
+    update_user_password(user_id, generate_password_hash(new_pw))
+    flash("Password changed successfully.", "success")
+    return redirect(url_for("profile"))
+
+
+# ------------------------------------------------------------------ #
+# Category Breakdown Routes                                           #
+# ------------------------------------------------------------------ #
+
+@app.route("/profile/categories/<category>")
+def profile_category(category):
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect(url_for("login"))
+    expenses = get_expenses_by_category(user_id, category)
+    summary  = get_expense_summary(user_id)
+    category_total = sum(e["amount"] for e in expenses)
+    return render_template(
+        "category.html",
+        category=category,
+        expenses=expenses,
+        category_total=category_total,
+        grand_total=summary["total"],
+    )
 
 
 @app.route("/expenses/add")

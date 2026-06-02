@@ -114,3 +114,48 @@ def get_expense_summary(user_id):
         "count": row["count"],
         "by_category": [(r["category"], r["subtotal"]) for r in by_category],
     }
+
+
+# ---- History DB Functions ----
+def get_user_expenses(user_id):
+    db = get_db()
+    rows = db.execute(
+        "SELECT id, amount, category, date, description FROM expenses "
+        "WHERE user_id = ? ORDER BY date DESC, id DESC",
+        (user_id,)
+    ).fetchall()
+    db.close()
+    return [dict(r) for r in rows]
+
+
+# ---- Summary Stats DB Functions ----
+def update_user_profile(user_id, name, email):
+    db = get_db()
+    db.execute(
+        "UPDATE users SET name = ?, email = ? WHERE id = ?",
+        (name, email, user_id),
+    )
+    db.commit()
+    db.close()
+
+
+def update_user_password(user_id, password_hash):
+    db = get_db()
+    db.execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (password_hash, user_id),
+    )
+    db.commit()
+    db.close()
+
+
+# ---- Category DB Functions ----
+def get_expenses_by_category(user_id, category):
+    db = get_db()
+    rows = db.execute(
+        "SELECT id, amount, date, description FROM expenses "
+        "WHERE user_id = ? AND category = ? ORDER BY date DESC, id DESC",
+        (user_id, category),
+    ).fetchall()
+    db.close()
+    return [dict(r) for r in rows]
