@@ -101,13 +101,33 @@ def profile():
 # History Routes                                                      #
 # ------------------------------------------------------------------ #
 
+def _parse_date(value):
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+        return value
+    except (ValueError, TypeError):
+        return None
+
+
 @app.route("/profile/history")
 def profile_history():
     user_id = session.get("user_id")
     if not user_id:
         return redirect(url_for("login"))
-    expenses = get_user_expenses(user_id)
-    return render_template("history.html", expenses=expenses)
+    raw_start  = request.args.get("start_date", "").strip()
+    raw_end    = request.args.get("end_date", "").strip()
+    start_date = _parse_date(raw_start)
+    end_date   = _parse_date(raw_end)
+    if (raw_start and start_date is None) or (raw_end and end_date is None):
+        start_date = None
+        end_date = None
+    expenses = get_user_expenses(user_id, start_date=start_date, end_date=end_date)
+    return render_template(
+        "history.html",
+        expenses=expenses,
+        start_date=start_date or "",
+        end_date=end_date or "",
+    )
 
 
 # ------------------------------------------------------------------ #

@@ -117,13 +117,19 @@ def get_expense_summary(user_id):
 
 
 # ---- History DB Functions ----
-def get_user_expenses(user_id):
+def get_user_expenses(user_id, start_date=None, end_date=None):
     db = get_db()
-    rows = db.execute(
-        "SELECT id, amount, category, date, description FROM expenses "
-        "WHERE user_id = ? ORDER BY date DESC, id DESC",
-        (user_id,)
-    ).fetchall()
+    query = ("SELECT id, amount, category, date, description FROM expenses "
+             "WHERE user_id = ?")
+    params = [user_id]
+    if start_date:
+        query += " AND date >= ?"
+        params.append(start_date)
+    if end_date:
+        query += " AND date <= ?"
+        params.append(end_date)
+    query += " ORDER BY date DESC, id DESC"
+    rows = db.execute(query, params).fetchall()
     db.close()
     return [dict(r) for r in rows]
 
