@@ -27,6 +27,33 @@
 {# --- History Table --- #}
 <section class="profile-section">
 
+  {# Date filter form #}
+  <form method="get" action="{{ url_for('profile_history') }}" class="filter-form">
+    <div class="filter-form__fields">
+      <div class="form-group">
+        <label for="start_date">From</label>
+        <input type="date" id="start_date" name="start_date"
+               class="form-input">
+      </div>
+      <div class="form-group">
+        <label for="end_date">To</label>
+        <input type="date" id="end_date" name="end_date"
+               class="form-input">
+      </div>
+      <button type="submit" class="btn-primary">Filter</button>
+    </div>
+  </form>
+
+  {% if start_date or end_date %}
+    <p class="filter-summary">
+      Showing expenses
+      {% if start_date %} from <strong id="filter-start"></strong>{% endif %}
+      {% if end_date %} to <strong id="filter-end"></strong>{% endif %}
+      &nbsp;·&nbsp;
+      <a href="{{ url_for('profile_history') }}" class="filter-clear">Clear filter</a>
+    </p>
+  {% endif %}
+
   {% if expenses %}
     <div class="history-table-wrap">
       <table class="history-table">
@@ -53,6 +80,11 @@
         </tbody>
       </table>
     </div>
+  {% elif start_date or end_date %}
+    <div class="category-empty">
+      <i data-lucide="search-x"></i>
+      <p>No expenses found for this period.</p>
+    </div>
   {% else %}
     <div class="category-empty">
       <i data-lucide="inbox"></i>
@@ -66,5 +98,15 @@
 
 {% block scripts %}
 <script src="https://unpkg.com/lucide@latest"></script>
-<script>lucide.createIcons();</script>
+<script>
+  lucide.createIcons();
+  {% if start_date %}
+  document.getElementById('start_date').value = '{{ start_date }}';
+  document.getElementById('filter-start').textContent = '{{ start_date }}';
+  {% endif %}
+  {% if end_date %}
+  document.getElementById('end_date').value = '{{ end_date }}';
+  document.getElementById('filter-end').textContent = '{{ end_date }}';
+  {% endif %}
+</script>
 {% endblock %}
