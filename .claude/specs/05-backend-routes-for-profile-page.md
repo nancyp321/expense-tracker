@@ -1,69 +1,104 @@
-# Spec: Backend Routes For Profile Page
+# Spec: Backend Connection
 
 ## Overview
-Step 5 adds write-capable backend routes to the profile page. Step 4 delivered a read-only profile — users can see their name, email, member-since date, and expense summary, but there is no way to change anything. This step wires up two POST routes — one to update a user's name and email, one to change their password — and extends `profile.html` with the corresponding forms. After this step, the profile page is fully interactive and the authenticated section of Spendly is complete before expense CRUD begins in Step 6.
+Step 5 replaces all hardcoded data in the `/profile` route with live queries
+against the SQLite database. The profile page currently renders a static demo
+user, fixed summary stats, a hand-typed transaction list, and a hardcoded
+category breakdown. This step wires those four sections to real data so that
+every logged-in user sees their own expenses. Three parallel subagents handle
+the three independent data concerns — transaction history, summary stats, and
+category breakdown — before being integrated into the single `/profile` route.
 
 ## Depends on
-- Step 1: Database setup (`get_db()`, `users` table)
-- Step 2: Registration (`create_user()`, `users` rows exist)
-- Step 3: Login / logout / sessions (`session["user_id"]` populated on login)
-- Step 4: Profile page design (`profile.html` template, `get_user_by_id()`, `get_expense_summary()` already in place)
+- Step 1: Database setup (tables and `get_db()` exist)
+- Step 2: Registration (users are stored in the database)
+- Step 3: Login / Logout (`session["user_id"]` is set on login)
+- Step 4: Profile page static UI (template already renders all four sections)
 
 ## Routes
-- `POST /profile/edit` — update the logged-in user's name and email — logged-in only
-- `POST /profile/password` — change the logged-in user's password — logged-in only
-
-Both routes redirect back to `GET /profile` on both success and validation failure (POST-Redirect-GET pattern). Flash messages communicate the outcome.
+No new routes. The existing `GET /profile` route is modified.
 
 ## Database changes
-No new tables or columns. Two new functions are needed in `database/db.py`:
-
-- `update_user_profile(user_id, name, email)` — executes `UPDATE users SET name = ?, email = ? WHERE id = ?`; raises `sqlite3.IntegrityError` if the email is already in use by another account
-- `update_user_password(user_id, password_hash)` — executes `UPDATE users SET password_hash = ? WHERE id = ?`
-
-`get_user_by_id` and `get_expense_summary` already exist from Step 4.
+No database changes. The `users` and `expenses` tables already have all
+required columns (`user_id`, `amount`, `category`, `date`, `description`,
+`created_at`).
 
 ## Templates
-- **Create:** none
-- **Modify:** `templates/profile.html` — append a "Account Settings" section below the existing CTA. It contains two sub-forms:
-  1. **Edit Profile form** — fields `name` (pre-filled) and `email` (pre-filled), submits `POST /profile/edit`
-  2. **Change Password form** — fields `current_password`, `new_password`, `confirm_password`, submits `POST /profile/password`
-  Each form has its own submit button. Both forms use `method="POST"`. Flash messages are already rendered by `base.html` and will appear at the top of the page.
+- **Modify**: `templates/profile.html`
+  - Amounts must be rendered with the ₹ symbol (Indian Rupee).
+  - All four dynamic sections (user info, summary stats, transaction list,
+    category breakdown) are already present — no structural changes needed,
+    only the Jinja variables they consume are now real.
 
 ## Files to change
-- `app.py` — add `profile_edit()` view for `POST /profile/edit` and `profile_password()` view for `POST /profile/password`; update import of db helpers to include `update_user_profile` and `update_user_password`
-- `database/db.py` — add `update_user_profile(user_id, name, email)` and `update_user_password(user_id, password_hash)`
-- `templates/profile.html` — add the Account Settings section with both forms
+- `app.py` — replace hardcoded data in the `profile()` view with DB queries
+- `templates/profile.html` — confirm ₹ symbol is used for all currency display
 
 ## Files to create
-None.
+- `database/queries.py` — pure query helpers (no Flask imports), one function
+  per data concern:
+  - `get_user_by_id(user_id)` → dict with `name`, `email`, `member_since`
+  - `get_summary_stats(user_id)` → dict with `total_spent`, `transaction_count`, `top_category`
+  - `get_recent_transactions(user_id, limit=10)` → list of dicts, each with `date`, `description`, `category`, `amount`
+  - `get_category_breakdown(user_id)` → list of dicts, each with `name`, `amount`, `pct` (percentage of total, rounded to nearest int)
 
 ## New dependencies
 No new dependencies.
 
 ## Rules for implementation
-- No SQLAlchemy or ORMs
-- Parameterised queries only — never use string formatting in SQL
-- Passwords hashed with `werkzeug.security.generate_password_hash` — store the hash, never plaintext
-- Verify the current password with `werkzeug.security.check_password_hash` before accepting a password change
-- Use CSS variables — never hardcode hex values in templates or stylesheets
+- No SQLAlchemy or ORMs — raw `sqlite3` only via `get_db()`
+- Parameterised queries only — never string-format values into SQL
+- Foreign keys PRAGMA must be enabled on every connection (already done in `get_db()`)
+- Use CSS variables — never hardcode hex values
 - All templates extend `base.html`
-- Both POST routes must check `session.get("user_id")` first; if missing, redirect to `url_for("login")`
-- Use the POST-Redirect-GET pattern: always redirect to `url_for("profile")` after handling the POST (whether success or error), and communicate outcomes via `flash()`
-- On a successful profile update, refresh `session["user_name"]` to reflect the new name so the navbar stays current
-- On a duplicate email error (`sqlite3.IntegrityError`), flash a user-friendly message — do not expose the raw exception
-- Validate that name and email are non-empty before hitting the database
-- For password change: validate that `new_password == confirm_password` before hashing; validate that `current_password` is correct before updating
+- No inline styles
+- Currency must always display as ₹ — never £ or $
+- `member_since` must be derived from `users.created_at` and formatted as
+  "Month YYYY" (e.g. "January 2026")
+- `pct` values in category breakdown must sum to 100; use integer rounding and
+  adjust the largest category to absorb any rounding remainder
+- If a user has no expenses, summary stats should return zeros and empty lists
+  rather than raising exceptions
+- Query helpers in `database/queries.py` must call `get_db()` internally and
+  close the connection before returning
+
+## Tests to write
+
+### Unit tests
+File: `tests/test_backend_connection.py`
+
+| Function | Input | Expected output |
+|---|---|---|
+| `get_user_by_id` | valid `user_id` | dict with correct `name`, `email`, `member_since` |
+| `get_user_by_id` | non-existent id | `None` |
+| `get_summary_stats` | `user_id` with expenses | correct `total_spent`, `transaction_count`, `top_category` |
+| `get_summary_stats` | `user_id` with no expenses | `{"total_spent": 0, "transaction_count": 0, "top_category": "—"}` |
+| `get_recent_transactions` | `user_id` with expenses | list ordered newest-first, each item has `date`, `description`, `category`, `amount` |
+| `get_recent_transactions` | `user_id` with no expenses | empty list |
+| `get_category_breakdown` | `user_id` with expenses | list ordered by `amount` desc; `pct` values are integers summing to 100 |
+| `get_category_breakdown` | `user_id` with no expenses | empty list |
+
+### Route tests
+`GET /profile` — unauthenticated:
+- Redirects to `/login` (302)
+
+`GET /profile` — authenticated as seed user:
+- Returns 200
+- Response contains the seed user's name ("Demo User")
+- Response contains the seed user's email ("demo@spendly.com")
+- Response contains ₹ symbol
+- `total_spent` matches sum of all seed expenses (346.24)
+- `transaction_count` is 8
+- `top_category` is "Bills" (highest single-category total)
+- Transaction list appears in newest-first order
+- Category breakdown contains all 7 categories
 
 ## Definition of done
-- [ ] `POST /profile/edit` with a new name updates `users.name` in the database
-- [ ] `POST /profile/edit` with a new email updates `users.email` in the database
-- [ ] After a successful name change, the profile page and navbar display the updated name
-- [ ] `POST /profile/edit` with an email already used by another account flashes an error and does not change anything
-- [ ] `POST /profile/edit` with empty name or email flashes a validation error and does not change anything
-- [ ] `POST /profile/password` with the correct current password and matching new/confirm fields updates the password hash
-- [ ] After a password change, the user can log out and log back in with the new password
-- [ ] `POST /profile/password` with an incorrect current password flashes an error and does not update anything
-- [ ] `POST /profile/password` where `new_password != confirm_password` flashes an error and does not update anything
-- [ ] Both routes redirect unauthenticated requests to `/login`
-- [ ] The Account Settings section is visible on the profile page and styled using only CSS variables
+- [ ] Logging in as the seed user (demo@spendly.com / demo123) shows "Demo User" and "demo@spendly.com" on the profile page — not the hardcoded strings
+- [ ] Total spent displayed on the profile page equals ₹346.24
+- [ ] Transaction count displayed is 8
+- [ ] Top category displayed is "Bills"
+- [ ] Transaction list shows 8 rows ordered newest date first
+- [ ] Category breakdown shows 7 categories with percentages that add up to 100 %
+- [ ] All amounts on the page display the ₹ symbol
+- [ ] Registering a brand-new user and visiting `/profile` shows ₹0.00 total spent, 0 transactions, and an empty category breakdown — no errors
