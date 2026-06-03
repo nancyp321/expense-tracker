@@ -6,11 +6,13 @@ from database.db import (
     get_db, init_db, seed_db,
     create_user, get_user_by_email, get_user_by_id, get_expense_summary,
     get_user_expenses, update_user_profile, update_user_password,
-    get_expenses_by_category,
+    get_expenses_by_category, add_expense as db_add_expense,
 )
 
 app = Flask(__name__)
 app.secret_key = "dev-secret-key"
+
+ALLOWED_CATEGORIES = ["Food", "Transport", "Bills", "Health", "Entertainment", "Shopping", "Other"]
 
 with app.app_context():
     init_db()
@@ -201,9 +203,42 @@ def analytics():
     return render_template("analytics.html")
 
 
-@app.route("/expenses/add")
+@app.route("/expenses/add", methods=["GET", "POST"])
 def add_expense():
-    return "Add expense — coming in Step 7"
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect(url_for("login"))
+
+    today = datetime.today().strftime("%Y-%m-%d")
+
+    if request.method == "POST":
+        raw_amount  = request.form.get("amount", "").strip()
+        category    = request.form.get("category", "").strip()
+        raw_date    = request.form.get("date", "").strip()
+        description = request.form.get("description", "").strip() or None
+
+        try:
+            amount = float(raw_amount)
+            if amount <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            flash("Amount must be a positive number.", "error")
+            return render_template("add_expense.html", categories=ALLOWED_CATEGORIES, today=today)
+
+        if category not in ALLOWED_CATEGORIES:
+            flash("Please select a valid category.", "error")
+            return render_template("add_expense.html", categories=ALLOWED_CATEGORIES, today=today)
+
+        date = _parse_date(raw_date)
+        if not date:
+            flash("Please enter a valid date.", "error")
+            return render_template("add_expense.html", categories=ALLOWED_CATEGORIES, today=today)
+
+        db_add_expense(user_id, amount, category, date, description)
+        flash("Expense added successfully.", "success")
+        return redirect(url_for("profile_history"))
+
+    return render_template("add_expense.html", categories=ALLOWED_CATEGORIES, today=today)
 
 
 @app.route("/expenses/<int:id>/edit")
