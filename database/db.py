@@ -165,3 +165,14 @@ def get_expenses_by_category(user_id, category):
     ).fetchall()
     db.close()
     return [dict(r) for r in rows]
+
+
+def add_expense(user_id, amount, category, date, description):
+    db = get_db()
+    cursor = db.execute(
+        "INSERT INTO expenses (user_id, amount, category, date, description) VALUES (?, ?, ?, ?, ?)",
+        (user_id, amount, category, date, description),
+    )
+    db.commit()
+    db.close()
+    return cursor.lastrowid
