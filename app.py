@@ -1,12 +1,13 @@
 import sqlite3
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, abort
 from werkzeug.security import generate_password_hash, check_password_hash
 from database.db import (
     get_db, init_db, seed_db,
     create_user, get_user_by_email, get_user_by_id, get_expense_summary,
     get_user_expenses, update_user_profile, update_user_password,
     get_expenses_by_category, add_expense as db_add_expense,
+    get_expense_by_id, update_expense,
 )
 
 app = Flask(__name__)
@@ -241,9 +242,46 @@ def add_expense():
     return render_template("add_expense.html", categories=ALLOWED_CATEGORIES, today=today)
 
 
-@app.route("/expenses/<int:id>/edit")
+@app.route("/expenses/<int:id>/edit", methods=["GET", "POST"])
 def edit_expense(id):
-    return "Edit expense — coming in Step 8"
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect(url_for("login"))
+
+    expense = get_expense_by_id(id)
+    if expense is None:
+        abort(404)
+    if expense["user_id"] != user_id:
+        abort(403)
+
+    if request.method == "POST":
+        raw_amount  = request.form.get("amount", "").strip()
+        category    = request.form.get("category", "").strip()
+        raw_date    = request.form.get("date", "").strip()
+        description = request.form.get("description", "").strip() or None
+
+        try:
+            amount = float(raw_amount)
+            if amount <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            flash("Amount must be a positive number.", "error")
+            return render_template("edit_expense.html", expense=expense, categories=ALLOWED_CATEGORIES)
+
+        if category not in ALLOWED_CATEGORIES:
+            flash("Please select a valid category.", "error")
+            return render_template("edit_expense.html", expense=expense, categories=ALLOWED_CATEGORIES)
+
+        date = _parse_date(raw_date)
+        if not date:
+            flash("Please enter a valid date.", "error")
+            return render_template("edit_expense.html", expense=expense, categories=ALLOWED_CATEGORIES)
+
+        update_expense(id, amount, category, date, description)
+        flash("Expense updated successfully.", "success")
+        return redirect(url_for("profile_history"))
+
+    return render_template("edit_expense.html", expense=expense, categories=ALLOWED_CATEGORIES)
 
 
 @app.route("/expenses/<int:id>/delete")
