@@ -8,6 +8,7 @@ from database.db import (
     get_user_expenses, update_user_profile, update_user_password,
     get_expenses_by_category, add_expense as db_add_expense,
     get_expense_by_id, update_expense,
+    delete_expense as db_delete_expense,
 )
 
 app = Flask(__name__)
@@ -284,9 +285,19 @@ def edit_expense(id):
     return render_template("edit_expense.html", expense=expense, categories=ALLOWED_CATEGORIES)
 
 
-@app.route("/expenses/<int:id>/delete")
+@app.route("/expenses/<int:id>/delete", methods=["POST"])
 def delete_expense(id):
-    return "Delete expense — coming in Step 9"
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect(url_for("login"))
+    expense = get_expense_by_id(id)
+    if expense is None:
+        abort(404)
+    if expense["user_id"] != user_id:
+        abort(403)
+    db_delete_expense(id)
+    flash("Expense deleted.", "success")
+    return redirect(url_for("profile_history"))
 
 
 if __name__ == "__main__":
